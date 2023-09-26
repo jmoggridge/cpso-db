@@ -13,3 +13,4 @@
 # class: org.openqa.selenium.TimeoutException
 # Further Details: run errorDetails method
 devtools::uses_testthat('.')
+usethis::create_package(path = getwd())

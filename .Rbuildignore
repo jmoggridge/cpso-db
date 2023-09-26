@@ -1,0 +1,4 @@
+^renv$
+^renv\.lock$
+^cpsocrawler\.Rproj$
+^\.Rproj\.user$
