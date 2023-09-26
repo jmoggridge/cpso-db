@@ -7,6 +7,8 @@ modules::import(RSelenium)
 modules::import(netstat)
 modules::import(glue)
 
+
+
 # Setup -----
 
 modules::export('start_selenium_firefox')
@@ -25,7 +27,7 @@ start_selenium_firefox <- function(){
 # navigates to the advanced search form
 visit_search_page <- function(remote){
   remote$navigate("https://doctors.cpso.on.ca/?search=general")
-  return(remote)
+  invisible(NULL)
 }
 
 # navigates remote to search results page 1
@@ -59,6 +61,7 @@ toggle_family_doctors <- function(remote) {
     '/html/body/form/section/div/div/div[2]/div/div/div/div[1]/div/div[3]/div[3]/div[2]/div/section[1]/fieldset/div[1]/label[1]'
   )
   family_radio_button$clickElement()
+  invisible(NULL)
 }
 
 toggle_specialist <- function(remote) {
@@ -66,6 +69,7 @@ toggle_specialist <- function(remote) {
   remote$executeScript(
     "document.getElementById('rdoDocTypeSpecialist').click()"
   )
+  invisible(NULL)
 }
 
 input_last_name <- function(remote, last_name){
@@ -73,7 +77,6 @@ input_last_name <- function(remote, last_name){
     using = 'xpath',
     value = '//*[@id="txtLastName"]'
   )
-  print(last_name_element)
   last_name_element$sendKeysToElement(list(last_name))
   invisible(NULL)
 }
@@ -104,13 +107,19 @@ links_from_results_page <- function(remote){
 }
 
 # from search results page, find last page number
+# if >5 there is a different box for the final page
+# if <=5 there isn't a box for this element
 get_total_pages <- function(remote){
-  pages <- remote$findElement(
-    using = 'xpath',
-    value = '//*[@id="p_lt_ctl01_pageplaceholder_p_lt_ctl03_CPSO_DoctorSearchResults_lnbLastPage"]'
-  )$getElementText() |>
+  
+  pages <- 
+    remote$findElement(
+      using = 'xpath',
+      value = '//*[@id="p_lt_ctl01_pageplaceholder_p_lt_ctl03_CPSO_DoctorSearchResults_lnbLastPage"]'
+    )$getElementText() |>
     purrr::pluck(1) |>
     as.numeric()
+  
+  return(pages)
 }
 
 
@@ -137,19 +146,47 @@ click_through_five_pages <- function(remote){
 
 # navigate to next pagination of five pages
 next_five_pages <- function(remote){
-  remote$findElement('xpath', '//*[@id="p_lt_ctl01_pageplaceholder_p_lt_ctl03_CPSO_DoctorSearchResults_lnbNextGroup"]')$clickElement()
+  
+  next_five_element <- NULL
+  attempts <- 0
+  
+  # keep trying to find element if page hasn't loaded yet
+  while (is.null(next_five_element) && attempts < 1000) {
+    next_five_element <- tryCatch({
+      remote$findElement('xpath', '//*[@id="p_lt_ctl01_pageplaceholder_p_lt_ctl03_CPSO_DoctorSearchResults_lnbNextGroup"]')
+    },
+    error = function(e){NULL})
+    attempts <- attempts + 1
+  }
+  
+  if (attempts > 999) {
+    stop('Next five pages link isnt displayed as expected.')
+  }
+  
+  next_five_element$clickElement()  
+  invisible(NULL)
 }
+
 
 # iterate over all search results pages
 get_links_from_results <- function(remote){
+  
+  pages_of_results <- 
+    purrr::possibly(get_total_pages, otherwise = 5)(remote)
+  paginations <- 
+    ceiling(pages_of_results/5)
+  
+  if (paginations == 1000) {
+    stop('too many search results for this letter')
+  }
+  
   purrr::map(
-    .x = seq(ceiling(get_total_pages(remote)/5)),
+    .x = seq(paginations),
     .f = ~{
       dat <- click_through_five_pages(remote)
       next_five_pages(remote)
       return(dat)
-    },
-    .progress = 'Collecting links'
+    }
   )
 }
 
@@ -231,15 +268,10 @@ scrape_doctor_page <- function(link, remote){
 }
 
 
+# Search Wrapper -----
 
-
-# Main Wrapper -----
-
-query_search_and_fetch <- function(remote,
-                                   last_name,
-                                   include_inactive,
-                                   family_only,
-                                   ignore_ids = c()) {
+query_search_and_fetch_links <- 
+  function(remote, last_name, include_inactive, family_only) {
   
   # perform the search and go to paginated results
   execute_search(
@@ -255,18 +287,48 @@ query_search_and_fetch <- function(remote,
     tidyr::unnest(link) |>
     tidyr::unnest(link) |>
     dplyr::select(link) |> 
+    dplyr::distinct() |> 
     dplyr::mutate(
       id = stringr::str_extract(link, '[^/]+$')
     )
+
+}
+
+
+# API -----
+
+
+export('fetch_all_doctors_urls')
+fetch_all_doctors_urls <- function(remote, 
+                              include_inactive = F, 
+                              family_only = T){
+  # do a search for each letter because results
+  # limited to 10,000 drs. (on 1000 results pages)
+  urls <- 
+    LETTERS |>
+    purrr::map(
+      ~query_search_and_fetch_links(
+        remote, 
+        last_name = .[[1]],
+        include_inactive = F, 
+        family_only = T
+      ),
+      .progress = 'Search queries'
+    ) |> 
+    dplyr::bind_rows() |> 
+    dplyr::distinct()
+  return(urls)
+}
+
+export('fetch_all_doctors_data')
+fetch_all_doctors_data <- function(remote, urls){
   
-  # scrape each doctor page
-  search_res |> 
-    dplyr::filter(!id %in% ignore_ids) |> 
+  data <- urls |> 
     dplyr::mutate(
       data = purrr::map(
-        link, scrape_doctor_page,
+        link, possibly(scrape_doctor_page, NULL),
         remote = remote,
-        .progress = 'Collecting data'
+        .progress = 'Visiting doctors'
       )
     ) |>
     tidyr::unnest_wider(data) |>
@@ -276,32 +338,8 @@ query_search_and_fetch <- function(remote,
         stringr::str_extract('(Gender:.*?)\n') |>
         stringr::str_remove_all('Gender: |\n')
     )
+  return(data)
 }
 
-
-# API -----
-
-export('fetch_all_doctors')
-fetch_all_doctors <- function(remote, 
-                              include_inactive = F, 
-                              family_only = T){
-  LETTERS |>
-    purrr::map(
-      ~query_search_and_fetch(
-        remote, 
-        last_name = .[[1]],
-        include_inactive = F, 
-        family_only = T
-      ),
-      .progress = 'Iterating over search queries'
-    ) |> 
-    dplyr::bind_rows()
-}
-
-
-
-# Utils ----
-
-# test for no duplicates
-# all_distinct <- function(x) length(unique(x)) == length(x)
-
+# //*[@id="p_lt_ctl01_pageplaceholder_p_lt_ctl03_CPSO_DoctorSearchResults_lnbNextGroup"]
+# //*[@id="p_lt_ctl01_pageplaceholder_p_lt_ctl03_CPSO_DoctorSearchResults_lnbNextGroup"]
