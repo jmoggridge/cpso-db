@@ -49,7 +49,7 @@ execute_search <- function(
   )
   submit_button$clickElement()
   
-  invisble(NULL)
+  invisible(NULL)
 }
 
 toggle_family_doctors <- function(remote) {
@@ -285,7 +285,7 @@ export('fetch_all_doctors')
 fetch_all_doctors <- function(remote, 
                               include_inactive = F, 
                               family_only = T){
-  LETTERS[1:2] |>
+  LETTERS |>
     purrr::map(
       ~query_search_and_fetch(
         remote, 
