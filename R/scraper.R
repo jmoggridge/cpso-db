@@ -1,3 +1,4 @@
+# TODO change modules to ?
 modules::import(dplyr)
 modules::import(tidyr)
 modules::import(tibble)
@@ -37,27 +38,27 @@ execute_search <- function(
     last_name = NULL,
     family_only = TRUE
     ) {
-  
+
   # go to advanced search
   visit_search_page(remote)
-  
+
   if (!is.null(last_name)) input_last_name(remote, last_name)
   if (include_inactive) toggle_inactive_doctors(remote)
   if (family_only) toggle_family_doctors(remote)
-  
+
   submit_button <- remote$findElement(
     using = 'name',
     value = 'p$lt$ctl01$pageplaceholder$p$lt$ctl02$CPSO_AllDoctorsSearch$btnSubmit1'
   )
   submit_button$clickElement()
-  
+
   invisible(NULL)
 }
 
 toggle_family_doctors <- function(remote) {
   # Select Type of Doctor: Family Doctor
   family_radio_button <- remote$findElement(
-    using = 'xpath', 
+    using = 'xpath',
     '/html/body/form/section/div/div/div[2]/div/div/div/div[1]/div/div[3]/div[3]/div[2]/div/section[1]/fieldset/div[1]/label[1]'
   )
   family_radio_button$clickElement()
@@ -93,7 +94,7 @@ toggle_inactive_doctors <- function(remote){
 # get up to 10 doctors' links from one results page
 links_from_results_page <- function(remote){
   remote$findElements(
-    using = 'tag name', 
+    using = 'tag name',
     value = 'a'
   ) |>
     purrr::map(
@@ -110,34 +111,34 @@ links_from_results_page <- function(remote){
 # if >5 there is a different box for the final page
 # if <=5 there isn't a box for this element
 get_total_pages <- function(remote){
-  
-  pages <- 
+
+  pages <-
     remote$findElement(
       using = 'xpath',
       value = '//*[@id="p_lt_ctl01_pageplaceholder_p_lt_ctl03_CPSO_DoctorSearchResults_lnbLastPage"]'
     )$getElementText() |>
     purrr::pluck(1) |>
     as.numeric()
-  
+
   return(pages)
 }
 
 
 # follow links to five results pages
 click_through_five_pages <- function(remote){
-  
+
   # scrape links from one results page
   goto_results_page_get_links <- function(xpath){
     remote$findElement('xpath', xpath)$clickElement()
     links_from_results_page(remote)
   }
-  
+
   # handle errors with results page
   possibly_get_links <- purrr::possibly(
     goto_results_page_get_links,
     otherwise = NULL
   )
-  
+
   # iterate over the five page links in the pagination section
   list(int = stringr::str_pad(0:4, 2, pad = '0')) |>
     glue::glue_data('//*[@id="p_lt_ctl01_pageplaceholder_p_lt_ctl03_CPSO_DoctorSearchResults_rptPages_ctl{int}_lnbPage"]') |>
@@ -146,10 +147,10 @@ click_through_five_pages <- function(remote){
 
 # navigate to next pagination of five pages
 next_five_pages <- function(remote){
-  
+
   next_five_element <- NULL
   attempts <- 0
-  
+
   # keep trying to find element if page hasn't loaded yet
   while (is.null(next_five_element) && attempts < 1000) {
     next_five_element <- tryCatch({
@@ -158,28 +159,28 @@ next_five_pages <- function(remote){
     error = function(e){NULL})
     attempts <- attempts + 1
   }
-  
+
   if (attempts > 999) {
     stop('Next five pages link isnt displayed as expected.')
   }
-  
-  next_five_element$clickElement()  
+
+  next_five_element$clickElement()
   invisible(NULL)
 }
 
 
 # iterate over all search results pages
 get_links_from_results <- function(remote){
-  
-  pages_of_results <- 
+
+  pages_of_results <-
     purrr::possibly(get_total_pages, otherwise = 5)(remote)
-  paginations <- 
+  paginations <-
     ceiling(pages_of_results/5)
-  
+
   if (paginations == 1000) {
     stop('too many search results for this letter')
   }
-  
+
   purrr::map(
     .x = seq(paginations),
     .f = ~{
@@ -206,19 +207,19 @@ str_cleanup <- function(x){
 
 ## get the table of specialties of the current doctor page
 scrape_specialties_table <- function(remote){
-  
+
   # find the right table
   tbl <- remote$findElement('id', 'specialties')
-  
+
   # find the body of that table
-  tbl_body <- 
+  tbl_body <-
     tbl$findChildElement(using = 'tag name', 'tbody')
-  
+
   # get all the rows of that table
-  tbl_rows <- 
+  tbl_rows <-
     tbl_body$findChildElements(using = 'tag name', 'tr') |>
     tibble::enframe(name = 'row', value = 'element')
-  
+
   # get td cells from each row and parse the 3 values, return table
   tbl_rows |>
     dplyr::mutate(
@@ -227,20 +228,20 @@ scrape_specialties_table <- function(remote){
         ~.$findChildElements('tag name', 'td') |>
           purrr::map(~.$getElementText()) |>
           purrr::set_names(
-            'specialty', 
-            'specialty_issued_date', 
+            'specialty',
+            'specialty_issued_date',
             'specialty_type'
             )
       )
     ) |>
     tidyr::unnest_wider(cells) |>
     dplyr::select(
-      specialty, 
-      specialty_issued_date, 
+      specialty,
+      specialty_issued_date,
       specialty_type
     ) |>
     dplyr::mutate(
-      dplyr::across( 
+      dplyr::across(
         dplyr::everything(),
         ~unlist(.) |> paste0()
         )
@@ -251,9 +252,9 @@ scrape_specialties_table <- function(remote){
 ## get data for a single doctor from their cpso page
 scrape_doctor_page <- function(link, remote){
   remote$navigate(link)
-  
+
   spec_tbl <- scrape_specialties_table(remote)
-  
+
   list(
     name = '//*[@id="docTitle"]',
     cpso_id = '/html/body/form/section/div/div/div[2]/div[3]/div[1]/h3',
@@ -270,24 +271,24 @@ scrape_doctor_page <- function(link, remote){
 
 # Search Wrapper -----
 
-query_search_and_fetch_links <- 
+query_search_and_fetch_links <-
   function(remote, last_name, include_inactive, family_only) {
-  
+
   # perform the search and go to paginated results
   execute_search(
-    remote, 
+    remote,
     last_name = last_name,
     include_inactive = include_inactive,
     family_only = family_only
   )
-  
+
   # go through paginated results and get urls
   search_res <- get_links_from_results(remote) |>
     tibble::enframe(name = 'group', value = 'link') |>
     tidyr::unnest(link) |>
     tidyr::unnest(link) |>
-    dplyr::select(link) |> 
-    dplyr::distinct() |> 
+    dplyr::select(link) |>
+    dplyr::distinct() |>
     dplyr::mutate(
       id = stringr::str_extract(link, '[^/]+$')
     )
@@ -299,31 +300,31 @@ query_search_and_fetch_links <-
 
 
 export('fetch_all_doctors_urls')
-fetch_all_doctors_urls <- function(remote, 
-                              include_inactive = F, 
+fetch_all_doctors_urls <- function(remote,
+                              include_inactive = F,
                               family_only = T){
   # do a search for each letter because results
   # limited to 10,000 drs. (on 1000 results pages)
-  urls <- 
+  urls <-
     LETTERS |>
     purrr::map(
       ~query_search_and_fetch_links(
-        remote, 
+        remote,
         last_name = .[[1]],
-        include_inactive = F, 
+        include_inactive = F,
         family_only = T
       ),
       .progress = 'Search queries'
-    ) |> 
-    dplyr::bind_rows() |> 
+    ) |>
+    dplyr::bind_rows() |>
     dplyr::distinct()
   return(urls)
 }
 
 export('fetch_all_doctors_data')
 fetch_all_doctors_data <- function(remote, urls){
-  
-  data <- urls |> 
+
+  data <- urls |>
     dplyr::mutate(
       data = purrr::map(
         link, possibly(scrape_doctor_page, NULL),
