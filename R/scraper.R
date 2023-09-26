@@ -249,7 +249,8 @@ scrape_specialties_table <- function(remote){
 
 
 ## get data for a single doctor from their cpso page
-scrape_doctor_page <- function(link, remote){
+export('scrape_doctor_page_unsafe')
+scrape_doctor_page_unsafe <- function(link, remote){
   remote$navigate(link)
   
   spec_tbl <- scrape_specialties_table(remote)
@@ -267,6 +268,19 @@ scrape_doctor_page <- function(link, remote){
     dplyr::mutate(spec_tbl = list(spec_tbl))
 }
 
+export('scrape_doctor_page')
+scrape_doctor_page <- function(link, remote){
+  doctor_res <- NULL
+  attempts <- 0
+  while (is.null(doctor_res) && attempts < 10) {
+    doctor_res <- tryCatch({
+      scrape_doctor_page_unsafe(link, remote)
+    },
+    error = function(e){NULL})
+    attempts <- attempts + 1
+  }
+  return(doctor_res)
+}
 
 # Search Wrapper -----
 
