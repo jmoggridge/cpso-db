@@ -12,19 +12,3 @@
 # Detail: An operation did not complete before its timeout expired.
 # class: org.openqa.selenium.TimeoutException
 # Further Details: run errorDetails method
-
-scraper <- modules::use('R/scraper.R')
-driver <- scraper$start_selenium_firefox()
-links <- readr::read_rds('data/urls.rds')
-
-
-link <- links |> 
-  dplyr::filter(dplyr::row_number() == 11215)
-
-
-rs <- scraper$scrape_doctor_page_unsafe(link$link, remote = driver$client)
-
-remote$navigate(link$link[1])
-print('x')
-remote$navigate(links$link[1])
-print('x')
