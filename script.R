@@ -13,7 +13,7 @@ readr::write_rds(urls, 'data/urls.rds')
 beepr::beep(1)
 
 doctors <- scraper$fetch_all_doctors_data(driver$client, urls)
-filename <- stringr::str_glue('data/cpso_active_family_doctors_{Sys.Date()}.rds')
+filename <- stringr::str_glue('data/cpso_active_family_doctors.rds')
 readr::write_rds(doctors, filename)
 driver$server$stop()
 beepr::beep(2)
