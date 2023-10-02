@@ -9,11 +9,12 @@ urls <- scraper$fetch_all_doctors_urls(
   family_only = T
 )
 
-readr::write_rds(urls, 'data/urls.rds')
+# readr::write_rds(urls, here::here('./data/family_doctor_urls.rds'))
 beepr::beep(1)
 
+urls <- readr::read_rds(here::here('./data/family_doctor_urls.rds'))
 doctors <- scraper$fetch_all_doctors_data(driver$client, urls)
-filename <- stringr::str_glue('data/cpso_active_family_doctors.rds')
-readr::write_rds(doctors, filename)
+filename <- stringr::str_glue('data/cpso_registered_family_doctors_with_reghx.rds')
+readr::write_rds(doctors, here::here(filename))
 driver$server$stop()
 beepr::beep(2)

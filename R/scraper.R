@@ -204,6 +204,31 @@ str_cleanup <- function(x){
   x |> stringr::str_remove(',') |> stringr::str_trim()
 }
 
+
+scrape_registration_history <- function(remote){
+  tbl <- remote$findElement('id', 'reghistory')
+  tbl_body <- tbl$findChildElement(using = 'tag name', 'tbody')
+  tbl_rows <- 
+    tbl_body$findChildElements(using = 'tag name', 'tr') |> 
+    tibble::enframe(name = 'row', value = 'element')
+  
+  rego <- 
+    tbl_rows |> 
+    dplyr::mutate(
+      cells = purrr::map(
+        element, 
+        ~.$findChildElements('tag name',  'td') |> 
+          purrr::map(~.$getElementText() |> as.character()) |> 
+          purrr::set_names('action', 'issue_date') |> 
+          as_tibble_row()
+      )
+    ) |> 
+    unnest(cells) |> 
+    select(action, issue_date) 
+  
+  return(rego)
+}
+
 ## get the table of specialties of the current doctor page
 scrape_specialties_table <- function(remote){
   
@@ -254,6 +279,7 @@ scrape_doctor_page_unsafe <- function(link, remote){
   remote$navigate(link)
   
   spec_tbl <- scrape_specialties_table(remote)
+  rego_tbl <- scrape_registration_history(remote)
   
   list(
     name = '//*[@id="docTitle"]',
@@ -265,7 +291,10 @@ scrape_doctor_page_unsafe <- function(link, remote){
   ) |>
     purrr::map(get_element_text, remote = remote) |>
     tibble::as_tibble_row() |>
-    dplyr::mutate(spec_tbl = list(spec_tbl))
+    dplyr::mutate(
+      specialties = list(spec_tbl),
+      registration_history = list(rego_tbl)
+      )
 }
 
 export('scrape_doctor_page')
