@@ -273,11 +273,73 @@ scrape_specialties_table <- function(remote){
 }
 
 
+scrape_status_table <- function(remote){
+  
+  tidy_expiry_date <- function(status_str){
+    rego_status <- 
+      status_str |> 
+      str_extract('EXPIRY DATE\n.*+\n\n') |> 
+      str_remove('EXPIRY DATE\n') |> 
+      str_remove('\n\n$')
+    
+    tibble(
+      cpso_registration_expiry_date = rego_status |> 
+        str_extract('[0-9]{2}\\s[A-Za-z]{3}\\s[0-9]{4}') |> 
+        dmy()
+    )
+  }
+  
+  tidy_registration <- function(status_str){
+    rego_status <- 
+      status_str |> 
+      str_extract('CURRENT OR PAST CPSO REGISTRATION CLASS\n.*+(\n\n)?') |> 
+      str_remove('CURRENT OR PAST CPSO REGISTRATION CLASS\n') |> 
+      str_remove('\n\n$')
+    
+    tibble(
+      cpso_registration_class = str_extract(rego_status, '.*?(?= as of)'),
+      cpso_registration_class_date = rego_status |> 
+        str_extract('[0-9]{2}\\s[A-Za-z]{3}\\s[0-9]{4}') |> 
+        dmy()
+    )
+  }
+  
+  tidy_member_status <- function(status_str){
+    member_status <- 
+      status_str |> 
+      str_extract('^MEMBER STATUS\n.*+\n\n') |> 
+      str_remove('^MEMBER STATUS\n') |> 
+      str_remove('\n\n$')
+    
+    tibble(
+      status = str_extract(member_status, '.*?(?= as of)'),
+      status_date = member_status |> 
+        str_extract('[0-9]{2}\\s[A-Za-z]{3}\\s[0-9]{4}') |> 
+        dmy()
+    )
+  }
+  
+  status_str <- 
+    remote$findElements('class', 'doctor-info') |> 
+    map_chr(~.$getElementText() |> paste0()) |> 
+    paste0(collapse = '\n\n')
+  
+  # main for scrape_status_table
+  dplyr::bind_cols(
+    tidy_member_status(status_str),
+    tidy_expiry_date(status_str),
+    tidy_registration(status_str)
+  )
+}
+
+
 ## get data for a single doctor from their cpso page
 export('scrape_doctor_page_unsafe')
 scrape_doctor_page_unsafe <- function(link, remote){
   remote$navigate(link)
   
+  
+  status_tbl <- scrape_status_table(remote)
   spec_tbl <- scrape_specialties_table(remote)
   rego_tbl <- scrape_registration_history(remote)
   
@@ -285,15 +347,14 @@ scrape_doctor_page_unsafe <- function(link, remote){
     name = '//*[@id="docTitle"]',
     cpso_id = '/html/body/form/section/div/div/div[2]/div[3]/div[1]/h3',
     address = '/html/body/form/section/div/div/div[2]/div[4]/section[2]/div/div[2]',
-    member_status = '/html/body/form/section/div/div/div[2]/div[3]/div[2]/div[2]/strong',
-    curr_or_past_cpso_reg_class = '/html/body/form/section/div/div/div[2]/div[3]/div[3]/div[2]',
-    info =  '/html/body/form/section/div/div/div[2]/div[4]/section[1]/div[2]'
+    info_raw =  '/html/body/form/section/div/div/div[2]/div[4]/section[1]/div[2]'
   ) |>
     purrr::map(get_element_text, remote = remote) |>
     tibble::as_tibble_row() |>
+    dpylr::bind_cols(status_tbl) |> 
     dplyr::mutate(
       specialties = list(spec_tbl),
-      registration_history = list(rego_tbl)
+      registration_history = list(rego_tbl),
       )
 }
 
@@ -335,6 +396,7 @@ query_search_and_fetch_links <-
       id = stringr::str_extract(link, '[^/]+$')
     )
 
+  return(search_res)
 }
 
 
@@ -377,12 +439,15 @@ fetch_all_doctors_data <- function(remote, urls){
     tidyr::unnest_wider(data) |>
     dplyr::mutate(
       cpso_id = stringr::str_remove(cpso_id, '^CPSO#: '),
-      gender = info |>
+      gender = info_raw |>
         stringr::str_extract('(Gender:.*?)\n') |>
         stringr::str_remove_all('Gender: |\n')
     )
   return(data)
 }
 
-# //*[@id="p_lt_ctl01_pageplaceholder_p_lt_ctl03_CPSO_DoctorSearchResults_lnbNextGroup"]
-# //*[@id="p_lt_ctl01_pageplaceholder_p_lt_ctl03_CPSO_DoctorSearchResults_lnbNextGroup"]
+# TODO move all cleaning into seperate processes here....
+clean_doctors_data <- function(data){
+  data |> 
+    mutate()
+}
