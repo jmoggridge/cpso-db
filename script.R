@@ -18,3 +18,5 @@ filename <- stringr::str_glue('data/cpso_registered_family_doctors_with_reghx.rd
 readr::write_rds(doctors, here::here(filename))
 driver$server$stop()
 beepr::beep(2)
+
+
