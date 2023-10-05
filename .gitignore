@@ -6,3 +6,5 @@
 */.DS_store
 renv/
 *.csv
+dev2.R
+dev/*
