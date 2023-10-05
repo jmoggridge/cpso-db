@@ -337,8 +337,6 @@ scrape_status_table <- function(remote){
 export('scrape_doctor_page_unsafe')
 scrape_doctor_page_unsafe <- function(link, remote){
   remote$navigate(link)
-  
-  
   status_tbl <- scrape_status_table(remote)
   spec_tbl <- scrape_specialties_table(remote)
   rego_tbl <- scrape_registration_history(remote)
@@ -351,7 +349,7 @@ scrape_doctor_page_unsafe <- function(link, remote){
   ) |>
     purrr::map(get_element_text, remote = remote) |>
     tibble::as_tibble_row() |>
-    dpylr::bind_cols(status_tbl) |> 
+    dplyr::bind_cols(status_tbl) |> 
     dplyr::mutate(
       specialties = list(spec_tbl),
       registration_history = list(rego_tbl),
