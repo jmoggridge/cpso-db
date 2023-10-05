@@ -5,3 +5,4 @@
 .DS_store
 */.DS_store
 renv/
+*.csv
